@@ -42,3 +42,7 @@ Desktop.ini
 .vscode/
 *.swp
 *.swo
+
+
+libs/
+*.dll
