@@ -1,6 +1,7 @@
 package nvml
 
 /*
+#cgo CFLAGS: -I"C:/Program Files/NVIDIA Corporation/NVSMI"
 #cgo LDFLAGS: -lnvidia-ml
 #include <nvml.h>
 */
