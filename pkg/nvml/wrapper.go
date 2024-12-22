@@ -2,7 +2,7 @@ package nvml
 
 /*
 #cgo CFLAGS: -I"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include"
-#cgo windows LDFLAGS: -lnvml
+#cgo windows LDFLAGS: -L"C:/Windows/System32" -L"${SRCDIR}/../../libs" -lnvml
 #cgo linux LDFLAGS: -lnvidia-ml
 #include <nvml.h>
 */
