@@ -28,3 +28,43 @@ type Server struct {
 	metrics chan types.GPUMetrics
 	clients sync.Map
 }
+func NewServer(metrics chan types.GPUMetrics) *Server {
+	return &Server{
+		metrics: metrics,
+	}
+}
+
+func (s *Server) Start() error {
+	// Serve static files
+	http.Handle("/", http.FileServer(http.Dir("web/build")))
+
+	// WebSocket endpoint for real-time metrics
+	http.HandleFunc("/ws", s.handleWebSocket)
+
+	// Start broadcasting metrics to all connected clients
+	go s.broadcastMetrics()
+
+	log.Printf("Starting server on :8080")
+	return http.ListenAndServe(":8080", nil)
+}
+
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade failed: %v", err)
+		return
+	}
+
+	// Store new client connection
+	clientID := fmt.Sprintf("%p", conn)
+	s.clients.Store(clientID, conn)
+
+	log.Printf("New client connected: %s", clientID)
+
+	// Clean up on disconnect
+	conn.SetCloseHandler(func(code int, text string) error {
+		s.clients.Delete(clientID)
+		log.Printf("Client disconnected: %s", clientID)
+		return nil
+	})
+}
