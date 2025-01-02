@@ -28,6 +28,7 @@ type Server struct {
 	metrics chan types.GPUMetrics
 	clients sync.Map
 }
+
 func NewServer(metrics chan types.GPUMetrics) *Server {
 	return &Server{
 		metrics: metrics,
@@ -67,4 +68,27 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Client disconnected: %s", clientID)
 		return nil
 	})
+}
+
+func (s *Server) broadcastMetrics() {
+	for metrics := range s.metrics {
+		// Add timestamp for graphs
+		data := struct {
+			types.GPUMetrics
+			Timestamp int64 `json:"timestamp"`
+		}{
+			GPUMetrics: metrics,
+			Timestamp:  time.Now().Unix(),
+		}
+
+		// Broadcast to all connected clients
+		s.clients.Range(func(key, value interface{}) bool {
+			conn := value.(*websocket.Conn)
+			if err := conn.WriteJSON(data); err != nil {
+				log.Printf("Failed to send metrics to client: %v", err)
+				s.clients.Delete(key)
+			}
+			return true
+		})
+	}
 }
