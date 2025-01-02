@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -9,44 +9,50 @@ import (
 	"time"
 
 	"github.com/PrathameshWalunj/gpuguardian/internal/monitor"
+	"github.com/PrathameshWalunj/gpuguardian/pkg/api"
 )
 
-// main is the entry point of the GPU Guardian application
-// It initializes the monitoring system and handles shutdown
 func main() {
+	// Command line flags for configuring the application's behavior
+	// 'web' flag determines if the app runs with a web dashboard
+	// 'port' flag sets the port for the web server
+	webMode := flag.Bool("web", false, "Run in web mode with dashboard")
+	port := flag.String("port", "8080", "Port for web server")
+	flag.Parse() // Parse the command-line flags
 
-	log.SetFlags(log.Ltime | log.Lshortfile)
-
-	mon := monitor.NewMonitor(time.Second) // Create a new monitor with 1 second update interval
-
+	// Set up the monitoring system with a 1-second update interval
+	mon := monitor.NewMonitor(time.Second)
 	if err := mon.Start(); err != nil {
-		fmt.Printf("Failed to start monitoring: %v\n", err)
-		os.Exit(1)
+		// If the monitoring system fails to start, log the error and exit
+		log.Fatalf("Failed to start monitoring: %v\n", err)
 	}
-	defer mon.Stop() // Ensure proper cleanup on exit
+	defer mon.Stop() // Ensure the monitor stops cleanly when the program exits
 
+	// Set up signal handling for graceful shutdown (e.g., SIGINT, SIGTERM)
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) // Handle interrupt signals
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
-		for metrics := range mon.Metrics() {
+	if *webMode {
+		// If webMode is true, start the web server to serve the dashboard
+		server := api.NewServer(mon.Metrics())
+		go func() {
+			// Start the web server in a separate goroutine
+			if err := server.Start(); err != nil {
+				// If the server fails to start, log the error and exit
+				log.Fatalf("Server failed: %v\n", err)
+			}
+		}()
+		log.Printf("Web dashboard running at http://localhost:%s\n", *port)
 
-			fmt.Printf("\033[2J\033[H") // Clear screen
-			fmt.Println("╔══════════════════════════════════════════╗")
-			fmt.Println("║           GPU GUARDIAN MONITOR           ║")
-			fmt.Println("╚══════════════════════════════════════════╝")
-			fmt.Printf("\nGPU: %s\n", metrics.Name)
-			fmt.Printf("Memory Usage: %.2f/%.2f GB (%.1f%%)\n",
-				float64(metrics.MemoryUsed)/1024/1024/1024,
-				float64(metrics.MemoryTotal)/1024/1024/1024,
-				float64(metrics.MemoryUsed*100)/float64(metrics.MemoryTotal))
-			fmt.Printf("GPU Utilization: %d%%\n", metrics.Utilization)
-			fmt.Printf("Temperature: %d°C\n", metrics.Temperature)
-			fmt.Printf("Process Count: %d\n\n", metrics.ProcessCount)
-			fmt.Println("Press Ctrl+C to exit")
-		}
-	}()
+		// Wait for shutdown signal
+		<-sigChan
+	} else {
+		// If webMode is false, run in terminal mode to display metrics in the console
+		go monitor.RunTerminalUI(mon.Metrics())
+		// Wait for shutdown signal
+		<-sigChan
+	}
 
-	<-sigChan // Block until a signal is received
-	fmt.Println("\nShutting down...")
+	// shut down the application after receiving a signal
+	log.Println("Shutting down...")
 }
